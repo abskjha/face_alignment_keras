@@ -219,7 +219,7 @@ def ResNetDepth(input, block=Bottleneck, layers=[3, 8, 36, 3], num_classes=68):
 	return fc
 
 
-
+##############################################################
 print('creating_network\n')
 x = Input(shape=(3, 256, 256))
 cb = ResNetDepth(x)
