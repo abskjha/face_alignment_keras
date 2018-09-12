@@ -36,20 +36,20 @@ def ConvBlock(input, in_planes, out_planes):
 	residual = input
 	in_planes = input.shape[1]
 	# print(input.shape[1])
-	bn1 = BatchNormalization(axis=-1)(input)
+	bn1 = BatchNormalization(axis=1,momentum=0.1)(input)
 	act1 = Activation('relu')(bn1)
 	conv1 = conv3x3(in_planes, int(out_planes / 2))(act1)
-	bn2 = BatchNormalization(axis=-1)(conv1)
+	bn2 = BatchNormalization(axis=1,momentum=0.1)(conv1)
 	act2 = Activation('relu')(bn2)
 	conv2 = conv3x3(int(out_planes / 2), int(out_planes / 4))(act2)
-	bn3 = BatchNormalization(axis=-1)(conv2)
+	bn3 = BatchNormalization(axis=1,momentum=0.1)(conv2)
 	act3 = Activation('relu')(bn3)
 	conv3 = conv3x3(int(out_planes / 4), int(out_planes / 4))(act3)
 	merge1 = Concatenate(axis=1)([conv1,conv2,conv3])
 	# merge1 = merge([conv1,conv2,conv3], mode = 'concat', concat_axis = -1)
 	# out = Model(input=bn1, output=merge1)
 	if in_planes != out_planes:
-		bn4 = BatchNormalization(axis=-1)(merge1)
+		bn4 = BatchNormalization(axis=1,momentum=0.1)(residual)
 		act4 = Activation('relu')(bn4)
 		conv4 = Conv2D(out_planes, kernel_size=1, strides=1, padding='same', use_bias=False)(act4)
 		# out = Model(input=bn1, output=conv4)
@@ -62,17 +62,17 @@ def ConvBlock(input, in_planes, out_planes):
 def Bottleneck(input, inplanes, planes, strides=1, downsample=None):
 	residual = input
 	conv1 = Conv2D(planes, kernel_size=1, use_bias=False)(input)
-	bn1 = BatchNormalization(axis=-1)(conv1)
+	bn1 = BatchNormalization(axis=1,momentum=0.1)(conv1)
 	act1 = Activation('relu')(bn1)
 	conv2 = Conv2D(planes, kernel_size=3, strides=strides, padding='same', use_bias=False)(act1)
-	bn2 = BatchNormalization(axis=-1)(conv2)
+	bn2 = BatchNormalization(axis=1,momentum=0.1)(conv2)
 	act2 = Activation('relu')(bn2)
 	conv3 = Conv2D(planes * 4, kernel_size=1, use_bias=False)(act2)
-	bn3 = BatchNormalization(axis=-1)(conv3)
+	bn3 = BatchNormalization(axis=1,momentum=0.1)(conv3)
 	if downsample is not None:
 		# residual = downsample
 		residual = Conv2D(downsample[0], kernel_size=1, strides=downsample[1], use_bias=False)(input)
-		residual = BatchNormalization(axis=-1)(residual)
+		residual = BatchNormalization(axis=1,momentum=0.1)(residual)
 	out = merge([bn3,residual], mode = 'sum', concat_axis = 1)
 	out = Activation('relu')(out)
 	return out
@@ -152,11 +152,11 @@ def HourGlass(input, num_modules, depth, num_features):
 
 def FAN(input, num_modules=1):
 	conv1 = Conv2D(64, kernel_size=7, strides=2, padding='same')(input)
-	bn1 = BatchNormalization(axis=-1)(conv1)
+	bn1 = BatchNormalization(axis=1,momentum=0.1)(conv1)
 	act1 = Activation('relu')(bn1)
 
 	conv2 = ConvBlock(act1,64, 128)
-	avgP1 = AveragePooling2D( 2, strides=2)(act1)
+	avgP1 = AveragePooling2D( 2, strides=2)(conv2)
 
 	conv3 = ConvBlock(avgP1,128, 128)
 	conv4 = ConvBlock(conv3,128, 256)
@@ -168,17 +168,18 @@ def FAN(input, num_modules=1):
 		hg = HourGlass(previous,1, 4, 256)
 		ll = hg
 		ll = ConvBlock(ll,256, 256)
-		ll = Conv2D(256, kernel_size=1, strides=1, padding='valid')(ll)
-		bn_temp = BatchNormalization(axis=-1)(ll)
+		ll = Conv2D(256, kernel_size=1, strides=1, padding='same')(ll)#valid
+		bn_temp = BatchNormalization(axis=1,momentum=0.1)(ll)
 		act_temp = Activation('relu')(bn_temp)
 
-		tmp_out = Conv2D(68, kernel_size=1, strides=1, padding='valid')(act_temp)
+		tmp_out = Conv2D(68, kernel_size=1, strides=1, padding='same')(act_temp)#valid
 		outputs.append(tmp_out)
 
 		if i < num_modules - 1:
-			ll = Conv2D(256, kernel_size=1, strides=1, padding='valid')(act_temp)
-			tmp_out_ = Conv2D(256, kernel_size=1, strides=1, padding='valid')(tmp_out)
-			previous = previous + ll + tmp_out_
+			ll = Conv2D(256, kernel_size=1, strides=1, padding='same')(act_temp)#valid
+			tmp_out_ = Conv2D(256, kernel_size=1, strides=1, padding='same')(tmp_out)#valid
+			# previous = previous + ll + tmp_out_
+			previous = merge([previous,ll,tmp_out_], mode = 'sum', concat_axis = 1)
 	return outputs
 
 
@@ -196,7 +197,7 @@ def ResNetDepth(input, block=Bottleneck, layers=[3, 8, 36, 3], num_classes=68):
 			ll = block(ll, inplanes, planes)
 		return ll
 	conv1 = Conv2D(64, kernel_size=7, strides=2, padding='same',use_bias=False)(input)
-	bn1 = BatchNormalization(axis=-1)(conv1)
+	bn1 = BatchNormalization(axis=1,momentum=0.1)(conv1)
 	act1 = Activation('relu')(bn1)
 	maxP1 = MaxPool2D(pool_size=3, strides=2, padding='valid')(act1)
 	layer1 = make_layer(maxP1, block, 64, layers[0])
@@ -219,12 +220,13 @@ def ResNetDepth(input, block=Bottleneck, layers=[3, 8, 36, 3], num_classes=68):
 	return fc
 
 
-##############################################################
+#######################################################################
 print('creating_network\n')
-x = Input(shape=(3, 256, 256))
-cb = ResNetDepth(x)
+x = Input(shape=(3, 64, 64))
+# cb = ResNetDepth(x)
+cb = FAN(x,1)
 model = Model(input=x,outputs=cb)
 model.summary()
-print('saving_network_plot')
-from keras.utils import plot_model
-plot_model(model, to_file='model.png')
+# print('saving_network_plot')
+# from keras.utils import plot_model
+# plot_model(model, to_file='model.png')
